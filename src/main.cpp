@@ -73,11 +73,22 @@ static const double KP = 0.5;         // Mahony proportional gain (tilt from acc
 static const double KI = 0.005;       // Mahony integral gain (gyro bias tracking)
 static const double ACC_GATE = 0.1;   // trust accel only when ||a|-g| < ACC_GATE*g
 static const double MAX_DT = 0.1;     // s; larger gaps are dropouts
+#ifndef VEL_TAU
+#define VEL_TAU 1.0                   // s; velocity decays toward 0 (bounds double-integration drift)
+#endif
+#ifndef ACC_TAU
+#define ACC_TAU 1.0                   // s; running mean of world accel (removes tilt/bias DC leak)
+#endif
+#ifndef POS_TAU
+#define POS_TAU 3.0                   // s; position leaks toward origin (room-scale motion is bounded)
+#endif
+static const double ZUPT_W = 0.05;    // rad/s; below this and |a|~g => treat as stationary
 
 struct State {
     double q[4] = {1, 0, 0, 0};
     double p[3] = {0, 0, 0}, v[3] = {0, 0, 0};
     double bg[3] = {0, 0, 0};
+    double abar[3] = {0, 0, 0};     // running mean of gravity-free world accel
     double g = 9.81;
     double w_prev[3] = {0, 0, 0};   // last bias-corrected rate
     unsigned long long ts_prev = 0;
@@ -132,6 +143,24 @@ static void step(State& st, const Sample& s) {
     for (int j = 0; j < 3; ++j) th[j] = 0.5 * (w[j] + st.w_prev[j]) * dt;  // RK2 midpoint
     qintegrate(st.q, th);
     memcpy(st.w_prev, w, sizeof w);
+
+    // Position: world accel minus gravity, damped velocity. Gaps/invalid rows: constant velocity.
+    if (s.valid && !gap) {
+        double aw[3];
+        rotate(st.q, s.a, aw);
+        aw[2] -= st.g;
+        double ka = 1 - exp(-dt / ACC_TAU);
+        for (int j = 0; j < 3; ++j) {
+            st.abar[j] += (aw[j] - st.abar[j]) * ka;
+            st.v[j] += (aw[j] - st.abar[j]) * dt;   // high-passed accel
+        }
+        bool still = norm3(w) < ZUPT_W && fabs(norm3(s.a) - st.g) < 0.02 * st.g;
+        // ponytail: exponential velocity damping instead of a full EKF; upgrade path = error-state EKF
+        double k = exp(-dt / (still ? 0.05 : VEL_TAU));
+        for (int j = 0; j < 3; ++j) st.v[j] *= k;
+    }
+    double kp = exp(-dt / POS_TAU);
+    for (int j = 0; j < 3; ++j) st.p[j] = st.p[j] * kp + st.v[j] * dt;
 }
 
 // TUM line: "sec.nanosec tx ty tz qx qy qz qw" (q stored internally as w,x,y,z).
