@@ -1,0 +1,11 @@
+{
+  "team": "TBD",
+  "language": "C++17",
+  "build": "g++ -O2 -std=c++17 -static -o pathfinder src/main.cpp",
+  "run": "./pathfinder <imu_csv> <out_txt>",
+  "threads": 1,
+  "peak_ram_mb": 4.3,
+  "peak_ram_note": "Windows peak working set incl. shared CRT pages; private bytes 0.66 MB",
+  "runtime_ms_per_s_of_data": 2.0,
+  "cpu": "TBD (fill on the machine used for the final run)"
+}
