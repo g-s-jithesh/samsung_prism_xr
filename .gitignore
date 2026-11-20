@@ -1,0 +1,17 @@
+# Local AI notes
+CLAUDE.md
+.claude/
+
+# Datasets (multi-GB, never commit)
+data/
+dataset-*/
+vicon_room1/
+*.zip
+
+# Outputs / build
+out/
+build/
+__pycache__/
+*.o
+*.exe
+/pathfinder
